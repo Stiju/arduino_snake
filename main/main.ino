@@ -45,14 +45,15 @@ void draw_square(int px, int py) {
 struct Player {
   Player() { reset(); }
   Position pos;
-  Position tail[64];
+  char tail[128];
   char direction;
-  int size;
+  int size, moved;
   void reset() {
     pos = {32,16};
     direction = 1;
     size = 6;
     memset(tail, 0, sizeof(tail));
+    moved = 0;
   }
   void turn_left() {
     direction = (direction + 3) % 4;
@@ -61,10 +62,10 @@ struct Player {
     direction = (direction + 1) % 4;
   }
   void update() {
-    for(int i = size; i > 0; --i) {
-      tail[i] = tail[i - 1];
+    for(int i = 127; i > 0; --i) {
+      tail[i] = tail[i] << 2 | ((tail[i - 1] >> 6) & 3);
     }
-    tail[0] = pos;
+    tail[0] = tail[0] << 2 | ((direction + 2) % 4);
     switch(direction) {
       case 0: --pos.y; break;
       case 1: ++pos.x; break;
@@ -139,12 +140,23 @@ void setup() {
   reset_game();
 }
 
-void update() {
+const Position dirpos[4] = {
+  {0,-1}, {1, 0}, {0, 1}, {-1, 0}
+};
+
+void update_game() {
   screen.set(player.pos.x, player.pos.y, 1);
   player.update();
-  Position tail = player.tail[(int)player.size];
-  if(tail.x != 0 && tail.y != 0) {
-    screen.set(tail.x, tail.y, 0);
+  Position pos = player.pos;
+  player.moved++;
+  int m = player.size > player.moved ? player.moved : player.size;
+  for(int i = 0; i < m; ++i){
+    Position dir = dirpos[(player.tail[(i >> 2)] >> ((i & 3) * 2)) & 3];
+    pos.x += dir.x;
+    pos.y += dir.y;
+  }
+  if(pos.x != 0 && pos.y != 0) {
+    screen.set(pos.x, pos.y, 0);
   }
   if(player.pos.x < 0) player.pos.x += kGameWidth;
   if(player.pos.y < 0) player.pos.y += kGameHeight;
@@ -183,7 +195,6 @@ void render() {
 
 void loop() {
   input();
-  update();
+  update_game();
   render();
 }
-
