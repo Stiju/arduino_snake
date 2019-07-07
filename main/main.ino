@@ -26,7 +26,7 @@ public:
     is_down = false;
     return down;
   }
-};
+} left_button{3}, right_button{2};
 
 struct Position {
   char x, y;  
@@ -35,17 +35,28 @@ struct Position {
   }
 };
 
-void draw_square(int px, int py) {
-  lcd.drawPixel(px, py, 1);
-  lcd.drawPixel(px+1, py, 1);
-  lcd.drawPixel(px, py+1, 1);
-  lcd.drawPixel(px+1, py+1, 1);
+void draw_square(Position pos, int color = WHITE) {
+  pos.x *= 2;
+  pos.y *= 2;
+  lcd.drawPixel(pos.x, pos.y, color);
+  lcd.drawPixel(pos.x+1, pos.y, color);
+  lcd.drawPixel(pos.x, pos.y+1, color);
+  lcd.drawPixel(pos.x+1, pos.y+1, color);
 }
 
+bool test_position(Position pos) {
+  return lcd.getPixel(pos.x * 2, pos.y * 2);
+}
+
+const Position kDirPos[4] = {
+  {0,-1}, {1, 0}, {0, 1}, {-1, 0}
+};
+
+const int kTailSize = 464;
 struct Player {
   Player() { reset(); }
   Position pos;
-  char tail[128];
+  char tail[kTailSize];
   char direction;
   int size, moved;
   void reset() {
@@ -62,7 +73,7 @@ struct Player {
     direction = (direction + 1) % 4;
   }
   void update() {
-    for(int i = 127; i > 0; --i) {
+    for(int i = kTailSize - 1; i > 0; --i) {
       tail[i] = tail[i] << 2 | ((tail[i - 1] >> 6) & 3);
     }
     tail[0] = tail[0] << 2 | ((direction + 2) % 4);
@@ -72,103 +83,56 @@ struct Player {
       case 2: ++pos.y; break;
       case 3: --pos.x; break;
     }
+    if(moved < size) {
+      moved++;
+    }
   }
   void render() const {
-    int px = pos.x * 2, py = pos.y * 2;
-    draw_square(px, py);
+    draw_square(pos);
+    if(moved < size) {
+      return;
+    }
+    Position tailpos = pos;
+    for(int i = 0; i < size; ++i) {
+      Position dir = kDirPos[(tail[(i >> 2)] >> ((i & 3) * 2)) & 3];
+      tailpos.x += dir.x;
+      tailpos.y += dir.y;
+    }
+    draw_square(tailpos, BLACK);
   }
-};
-Player player;
+} player;
+
 struct Item {
   Position pos;
   Item() : pos{4, 4} {}
   void render() const {
-    int px = pos.x * 2, py = pos.y * 2;
-    draw_square(px, py);
+    draw_square(pos);
   }
-};
+} item;
 
-Item item;
-
-PushButton left_button{3}, right_button{2};
-struct Screen {
-  char data[256];
-  void clear() {
-    for(int i = 0; i < 256; ++i) {
-      data[i] = 0;
-    }
-  }
-  void set(int x, int y, bool val) {
-    if(val) {
-      data[x + (y >> 3) * kGameWidth] |= (1 << (y & 7));
-    } else {
-      data[x + (y >> 3) * kGameWidth] &= ~(1 << (y & 7));
-    }
-  }
-  bool test(int x, int y) const {
-    return (data[x + (y >> 3) * kGameWidth] & (1 << (y & 7))) != 0;
-  }
-  void render() {
-    for(int y = 0; y < 32; ++y) {
-      for(int x = 0; x < 64; ++x) {
-        if(test(x, y)) {
-          int px = x * 2, py = y * 2;
-          draw_square(px, py);
-        }
-      }
-    }
-  }
-};
-
-Screen screen;
 void reset_game() {
-  screen.clear();
-  for(int x = 0; x < kGameWidth; ++x) {
-    screen.set(x, 0, 1);
-    screen.set(x, 31, 1);
+  lcd.clearDisplay();
+  for(char x = 0; x < kGameWidth; ++x) {
+    draw_square({x, 0});
+    draw_square({x, 31});
   }
-  for(int y = 0; y < kGameHeight; ++y) {
-    screen.set(0, y, 1);
-    screen.set(63, y, 1);
+  for(char y = 0; y < kGameHeight; ++y) {
+    draw_square({0, y});
+    draw_square({63, y});
   }
   player.reset();
   item.pos.x = random(1, 63);
   item.pos.y = random(1, 31);
 }
-void setup() {
-  lcd.begin(SSD1306_SWITCHCAPVCC);
-  reset_game();
-}
-
-const Position dirpos[4] = {
-  {0,-1}, {1, 0}, {0, 1}, {-1, 0}
-};
 
 void update_game() {
-  screen.set(player.pos.x, player.pos.y, 1);
   player.update();
-  Position pos = player.pos;
-  player.moved++;
-  int m = player.size > player.moved ? player.moved : player.size;
-  for(int i = 0; i < m; ++i){
-    Position dir = dirpos[(player.tail[(i >> 2)] >> ((i & 3) * 2)) & 3];
-    pos.x += dir.x;
-    pos.y += dir.y;
-  }
-  if(pos.x != 0 && pos.y != 0) {
-    screen.set(pos.x, pos.y, 0);
-  }
-  if(player.pos.x < 0) player.pos.x += kGameWidth;
-  if(player.pos.y < 0) player.pos.y += kGameHeight;
-  if(player.pos.x >= kGameWidth) player.pos.x -= kGameWidth;
-  if(player.pos.y >= kGameHeight) player.pos.y -= kGameHeight;
-
+  
   if(player.pos == item.pos) {
     player.size++;
     item.pos.x = random(1, 63);
     item.pos.y = random(1, 31);
-  }
-  if(screen.test(player.pos.x, player.pos.y)) {
+  } else if(test_position(player.pos)) {
     reset_game();
   }
 }
@@ -186,11 +150,14 @@ void input() {
 }
 
 void render() {
-  lcd.clearDisplay();
-  screen.render();
   player.render();
   item.render();
   lcd.display();
+}
+
+void setup() {
+  lcd.begin(SSD1306_SWITCHCAPVCC);
+  reset_game();
 }
 
 void loop() {
