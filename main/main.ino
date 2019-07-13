@@ -1,13 +1,13 @@
 #include <Adafruit_SSD1306.h>
 
-const int kScreenWidth = 128, kScreenHeight = 64, kGameWidth = 64, kGameHeight = 32;
+const int kScreenWidth = 128, kScreenHeight = 64, kGameWidth = 64, kGameHeight = 32, kMaxLength = 464, kStartLength = 6;
 const int OLED_MOSI = 9, OLED_CLK = 10, OLED_DC = 11, OLED_CS = 12, OLED_RESET = 13;
 
 Adafruit_SSD1306 lcd(kScreenWidth, kScreenHeight, OLED_MOSI, OLED_CLK, OLED_DC, OLED_RESET, OLED_CS);
 
 
 class PushButton {
-  char last_state, is_down, pin;
+  unsigned char last_state, is_down, pin;
 public:
   PushButton(int pin) : last_state(0), is_down(0), pin(pin) {
     pinMode(pin, INPUT);
@@ -33,15 +33,15 @@ struct Position {
   bool operator==(const Position& other) const {
     return x == other.x && y == other.y;
   }
+  Position& operator+=(const Position& other) {
+    x += other.x;
+    y += other.y;
+    return *this;
+  }
 };
 
 void draw_square(Position pos, int color = WHITE) {
-  pos.x *= 2;
-  pos.y *= 2;
-  lcd.drawPixel(pos.x, pos.y, color);
-  lcd.drawPixel(pos.x+1, pos.y, color);
-  lcd.drawPixel(pos.x, pos.y+1, color);
-  lcd.drawPixel(pos.x+1, pos.y+1, color);
+  lcd.fillRect(pos.x * 2, pos.y * 2, 2, 2, color);
 }
 
 bool test_position(Position pos) {
@@ -52,17 +52,16 @@ const Position kDirPos[4] = {
   {0,-1}, {1, 0}, {0, 1}, {-1, 0}
 };
 
-const int kTailSize = 464;
 struct Player {
   Player() { reset(); }
   Position pos;
-  char tail[kTailSize];
-  char direction;
+  unsigned char tail[kMaxLength];
+  unsigned char direction;
   int size, moved;
   void reset() {
     pos = {32,16};
     direction = 1;
-    size = 6;
+    size = kStartLength;
     memset(tail, 0, sizeof(tail));
     moved = 0;
   }
@@ -73,16 +72,11 @@ struct Player {
     direction = (direction + 1) % 4;
   }
   void update() {
-    for(int i = kTailSize - 1; i > 0; --i) {
+    for(int i = kMaxLength - 1; i > 0; --i) {
       tail[i] = tail[i] << 2 | ((tail[i - 1] >> 6) & 3);
     }
     tail[0] = tail[0] << 2 | ((direction + 2) % 4);
-    switch(direction) {
-      case 0: --pos.y; break;
-      case 1: ++pos.x; break;
-      case 2: ++pos.y; break;
-      case 3: --pos.x; break;
-    }
+    pos += kDirPos[direction];
     if(moved < size) {
       moved++;
     }
@@ -94,9 +88,7 @@ struct Player {
     }
     Position tailpos = pos;
     for(int i = 0; i < size; ++i) {
-      Position dir = kDirPos[(tail[(i >> 2)] >> ((i & 3) * 2)) & 3];
-      tailpos.x += dir.x;
-      tailpos.y += dir.y;
+      tailpos += kDirPos[(tail[(i >> 2)] >> ((i & 3) * 2)) & 3];
     }
     draw_square(tailpos, BLACK);
   }
@@ -104,7 +96,10 @@ struct Player {
 
 struct Item {
   Position pos;
-  Item() : pos{4, 4} {}
+  void spawn() {
+    pos.x = random(1, 63);
+    pos.y = random(1, 31);
+  }
   void render() const {
     draw_square(pos);
   }
@@ -121,8 +116,7 @@ void reset_game() {
     draw_square({63, y});
   }
   player.reset();
-  item.pos.x = random(1, 63);
-  item.pos.y = random(1, 31);
+  item.spawn();
 }
 
 void update_game() {
@@ -130,8 +124,7 @@ void update_game() {
   
   if(player.pos == item.pos) {
     player.size++;
-    item.pos.x = random(1, 63);
-    item.pos.y = random(1, 31);
+    item.spawn();
   } else if(test_position(player.pos)) {
     reset_game();
   }
