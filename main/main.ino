@@ -1,10 +1,11 @@
 #include <Adafruit_SSD1306.h>
+#include <EEPROM.h>
+#include "bitmaps.h"
 
 const int kScreenWidth = 128, kScreenHeight = 64, kGameWidth = 64, kGameHeight = 32, kMaxLength = 464, kStartLength = 6;
 const int OLED_MOSI = 9, OLED_CLK = 10, OLED_DC = 11, OLED_CS = 12, OLED_RESET = 13;
 
 Adafruit_SSD1306 lcd(kScreenWidth, kScreenHeight, OLED_MOSI, OLED_CLK, OLED_DC, OLED_RESET, OLED_CS);
-
 
 class PushButton {
   unsigned char last_state, is_down, pin;
@@ -105,6 +106,58 @@ struct Item {
   }
 } item;
 
+void wait_for_input() {
+  do {
+    right_button.update();
+    left_button.update();
+  } while(!right_button.get_state() && !left_button.get_state());
+}
+
+void push_to_start() {
+  lcd.setCursor(26,57);
+  lcd.print(F("Push to start"));
+}
+
+void flash_screen() {
+  lcd.invertDisplay(true);
+  delay(100);
+  lcd.invertDisplay(false);
+  delay(200);
+}
+
+void play_intro() {
+  lcd.clearDisplay();
+  lcd.drawBitmap(18, 0, kSplashScreen, 92, 56, WHITE);
+  push_to_start();
+  lcd.display();
+  wait_for_input();
+  flash_screen();
+}
+
+void play_gameover() {
+  flash_screen();
+  lcd.clearDisplay();
+  lcd.drawBitmap(4, 0, kGameOver, 124, 38, WHITE);
+  int score = player.size - kStartLength;
+  lcd.setCursor(26, 34);
+  lcd.print(F("Score: "));
+  lcd.print(score);
+  int hiscore;
+  EEPROM.get(0, hiscore);
+  if(score > hiscore) {
+    EEPROM.put(0, score);
+    hiscore = score;
+    lcd.setCursor(4, 44);
+    lcd.print(F("NEW"));
+  }
+  lcd.setCursor(26, 44);
+  lcd.print(F("Hi-Score: "));
+  lcd.print(hiscore);
+  push_to_start();
+  lcd.display();
+  wait_for_input();
+}
+
 void reset_game() {
   lcd.clearDisplay();
   for(char x = 0; x < kGameWidth; ++x) {
@@ -126,6 +179,7 @@ void update_game() {
     player.size++;
     item.spawn();
   } else if(test_position(player.pos)) {
+    play_gameover();
     reset_game();
   }
 }
@@ -150,6 +204,8 @@ void render() {
 
 void setup() {
   lcd.begin(SSD1306_SWITCHCAPVCC);
+  lcd.setTextColor(WHITE);
+  play_intro();
   reset_game();
 }
 
