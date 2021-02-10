@@ -1,11 +1,23 @@
+#include <Wire.h>
 #include <Adafruit_SSD1306.h>
 #include <EEPROM.h>
 #include "bitmaps.h"
 
+//#define USEISP
+#define USEI2C
+
 const int kScreenWidth = 128, kScreenHeight = 64, kGameWidth = 64, kGameHeight = 32, kMaxLength = 464, kStartLength = 6;
+
+    
+
 const int OLED_MOSI = 9, OLED_CLK = 10, OLED_DC = 11, OLED_CS = 12, OLED_RESET = 13;
 
-Adafruit_SSD1306 lcd(kScreenWidth, kScreenHeight, OLED_MOSI, OLED_CLK, OLED_DC, OLED_RESET, OLED_CS);
+#ifdef USEISP
+  Adafruit_SSD1306 lcd(kScreenWidth, kScreenHeight, OLED_MOSI, OLED_CLK, OLED_DC, OLED_RESET, OLED_CS);
+#endif
+#ifdef USEI2C
+  Adafruit_SSD1306 lcd(kScreenWidth, kScreenHeight, &Wire, -1);
+#endif
 
 class PushButton {
   unsigned char last_state, is_down, pin;
@@ -203,7 +215,13 @@ void render() {
 }
 
 void setup() {
+#ifdef USEISP
   lcd.begin(SSD1306_SWITCHCAPVCC);
+#endif
+#ifdef USEI2C
+  lcd.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+#endif
+
   lcd.setTextColor(WHITE);
   play_intro();
   reset_game();
