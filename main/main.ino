@@ -42,7 +42,7 @@ public:
 } left_button{3}, right_button{2};
 
 struct Position {
-  char x, y;  
+  signed char x, y;  
   bool operator==(const Position& other) const {
     return x == other.x && y == other.y;
   }
